@@ -1,0 +1,144 @@
+import { parseDifficulty } from "@/features/questions/difficulty";
+import { normalizeImages } from "@/features/questions/media";
+import { createId } from "@/lib/ids";
+import type {
+  ImportedQuestion,
+  ImportedQuestionSet,
+  Question,
+  QuestionSet,
+} from "@/types/question";
+import { ImportValidationError } from "./ImportValidationError";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asOptionalTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function formatQuestionLabel(index: number): string {
+  return `Question ${index + 1}`;
+}
+
+export function validateAndNormalizeQuestionSet(raw: unknown): QuestionSet {
+  const problems: string[] = [];
+
+  if (!isRecord(raw)) {
+    throw new ImportValidationError([
+      "The file must contain a question set object with a title and a questions array.",
+    ]);
+  }
+
+  const imported = raw as ImportedQuestionSet;
+  const title = asOptionalTrimmedString(imported.title);
+
+  if (!title) {
+    problems.push("The question set is missing a title.");
+  }
+
+  if (imported.questions === undefined) {
+    problems.push("The questions field is missing.");
+  } else if (!Array.isArray(imported.questions)) {
+    problems.push("The questions field must be an array.");
+  }
+
+  const questions: Question[] = [];
+
+  if (Array.isArray(imported.questions)) {
+    imported.questions.forEach((item, index) => {
+      const label = formatQuestionLabel(index);
+
+      if (!isRecord(item)) {
+        problems.push(`${label} is not a valid question object.`);
+        return;
+      }
+
+      const rawQuestion = item as ImportedQuestion;
+      const questionText = asOptionalTrimmedString(rawQuestion.question);
+      const type = asOptionalTrimmedString(rawQuestion.type);
+
+      if (!questionText) {
+        problems.push(`${label} is missing question text.`);
+      }
+
+      if (!type) {
+        problems.push(`${label} is missing a question type.`);
+      }
+
+      if (!questionText || !type) {
+        return;
+      }
+
+      const question: Question = {
+        id: asOptionalTrimmedString(rawQuestion.id) ?? createId("question"),
+        question: questionText,
+        type,
+      };
+
+      if ("options" in rawQuestion) {
+        question.options = rawQuestion.options;
+      }
+      if ("answer" in rawQuestion) {
+        question.answer = rawQuestion.answer;
+      }
+
+      const images = normalizeImages(rawQuestion);
+      if (images.length > 0) {
+        question.images = images;
+      }
+
+      const explanation = asOptionalTrimmedString(rawQuestion.explanation);
+      const subject = asOptionalTrimmedString(rawQuestion.subject);
+      const topic = asOptionalTrimmedString(rawQuestion.topic);
+      const difficulty = parseDifficulty(rawQuestion.difficulty);
+
+      if (explanation) {
+        question.explanation = explanation;
+      }
+      if (subject) {
+        question.subject = subject;
+      }
+      if (topic) {
+        question.topic = topic;
+      }
+      if (difficulty) {
+        question.difficulty = difficulty;
+      }
+
+      questions.push(question);
+    });
+  }
+
+  if (problems.length > 0) {
+    throw new ImportValidationError(problems);
+  }
+
+  if (!title) {
+    throw new ImportValidationError(["The question set is missing a title."]);
+  }
+
+  const now = new Date().toISOString();
+  const description = asOptionalTrimmedString(imported.description);
+  const subject = asOptionalTrimmedString(imported.subject);
+  const questionSet: QuestionSet = {
+    id: asOptionalTrimmedString(imported.id) ?? createId("set"),
+    title,
+    questions,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (description) {
+    questionSet.description = description;
+  }
+  if (subject) {
+    questionSet.subject = subject;
+  }
+
+  return questionSet;
+}
