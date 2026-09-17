@@ -1,5 +1,5 @@
 import { OptionContent } from "@/features/questions/components/OptionContent";
-import { getNormalizedOptions } from "@/features/questions/media";
+import { findOption, getNormalizedOptions } from "@/features/questions/media";
 import type { Question } from "@/types/question";
 import { ChoiceOption } from "./ChoiceOption";
 
@@ -15,9 +15,11 @@ export function MultipleChoiceQuestion({
   onChange,
 }: MultipleChoiceQuestionProps) {
   const options = getNormalizedOptions(question);
-  const selected = Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
+  const selected = (
+    Array.isArray(value) ? value : value !== undefined && value !== null ? [value] : []
+  )
+    .map((item) => findOption(options, item)?.id)
+    .filter((item): item is string => Boolean(item));
 
   if (options.length === 0) {
     return (
@@ -44,9 +46,7 @@ export function MultipleChoiceQuestion({
           type="checkbox"
           name={`question-${question.id}`}
           value={option.id}
-          checked={selected.some(
-            (item) => item === option.id || item === option.text,
-          )}
+          checked={selected.includes(option.id)}
           onChange={() => toggle(option.id)}
         >
           <OptionContent option={option} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MathText } from "@/features/questions/components/MathText";
 import { QuestionImages } from "@/features/questions/components/QuestionImages";
 import { getQuestionImages } from "@/features/questions/media";
 import { QuestionRenderer } from "@/features/questions/renderers/QuestionRenderer";
@@ -218,9 +219,13 @@ export function StudySessionView({
             {questionSourceLabel(session, question.id)}
           </p>
         ) : null}
-        <p className="font-serif text-xl leading-snug break-words text-foreground sm:text-2xl">
-          {question.question}
-        </p>
+        {question.question.trim() ? (
+          <MathText
+            as="p"
+            className="font-serif text-xl leading-snug break-words text-foreground sm:text-2xl"
+            text={question.question}
+          />
+        ) : null}
         {getQuestionImages(question).length > 0 ? (
           <div className="mt-4">
             <QuestionImages images={getQuestionImages(question)} />

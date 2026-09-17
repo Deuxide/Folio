@@ -1,5 +1,11 @@
 import { parseDifficulty } from "@/features/questions/difficulty";
-import { normalizeImages } from "@/features/questions/media";
+import {
+  getNormalizedOptions,
+  hasOptionContent,
+  normalizeImages,
+  persistNormalizedOptions,
+} from "@/features/questions/media";
+import { normalizeQuestionType } from "@/features/questions/normalizeQuestionType";
 import { createId } from "@/lib/ids";
 import type {
   ImportedQuestion,
@@ -59,18 +65,21 @@ export function validateAndNormalizeQuestionSet(raw: unknown): QuestionSet {
       }
 
       const rawQuestion = item as ImportedQuestion;
-      const questionText = asOptionalTrimmedString(rawQuestion.question);
+      const questionText = asOptionalTrimmedString(rawQuestion.question) ?? "";
       const type = asOptionalTrimmedString(rawQuestion.type);
+      const images = normalizeImages(rawQuestion);
 
-      if (!questionText) {
-        problems.push(`${label} is missing question text.`);
+      if (!questionText && images.length === 0) {
+        problems.push(
+          `${label} needs question text or at least one image.`,
+        );
       }
 
       if (!type) {
         problems.push(`${label} is missing a question type.`);
       }
 
-      if (!questionText || !type) {
+      if ((!questionText && images.length === 0) || !type) {
         return;
       }
 
@@ -87,9 +96,23 @@ export function validateAndNormalizeQuestionSet(raw: unknown): QuestionSet {
         question.answer = rawQuestion.answer;
       }
 
-      const images = normalizeImages(rawQuestion);
       if (images.length > 0) {
         question.images = images;
+      }
+
+      const kind = normalizeQuestionType(type);
+      if (kind === "single_choice" || kind === "multiple_choice") {
+        const options = getNormalizedOptions(question);
+        if (options.length === 0) {
+          problems.push(`${label} needs at least one answer option.`);
+        }
+        options.forEach((option, optionIndex) => {
+          if (!hasOptionContent(option)) {
+            problems.push(
+              `${label} option ${optionIndex + 1} needs text or an image.`,
+            );
+          }
+        });
       }
 
       const explanation = asOptionalTrimmedString(rawQuestion.explanation);
@@ -110,7 +133,11 @@ export function validateAndNormalizeQuestionSet(raw: unknown): QuestionSet {
         question.difficulty = difficulty;
       }
 
-      questions.push(question);
+      questions.push(
+        kind === "single_choice" || kind === "multiple_choice"
+          ? persistNormalizedOptions(question)
+          : question,
+      );
     });
   }
 

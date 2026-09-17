@@ -1,3 +1,5 @@
+import { persistNormalizedOptions } from "@/features/questions/media";
+import { normalizeQuestionType } from "@/features/questions/normalizeQuestionType";
 import { selectQuestionIds } from "@/features/study/selectQuestions";
 import { minutesToMs } from "@/features/study/timer";
 import { createId } from "@/lib/ids";
@@ -92,7 +94,14 @@ export function createStudySession(
   const snapshots = Object.fromEntries(
     pool
       .filter((question) => questionIds.includes(question.id))
-      .map((question) => [question.id, question]),
+      .map((question) => {
+        const kind = normalizeQuestionType(question.type);
+        const snapshot =
+          kind === "single_choice" || kind === "multiple_choice"
+            ? persistNormalizedOptions(question)
+            : question;
+        return [question.id, snapshot];
+      }),
   );
   const usesSessionTimer =
     configuration.timeLimitMode === "session" ||

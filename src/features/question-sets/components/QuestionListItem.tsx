@@ -1,4 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { MathText } from "@/features/questions/components/MathText";
+import { QuestionImages } from "@/features/questions/components/QuestionImages";
+import { getQuestionImages } from "@/features/questions/media";
 import { QuestionAttemptHistory } from "@/features/history/components/QuestionAttemptHistory";
 import type { QuestionHistoryEntry } from "@/features/history/extractAttempts";
 import { formatDifficulty } from "@/features/questions/difficulty";
@@ -25,9 +28,20 @@ export function QuestionListItem({
         {index + 1}
       </div>
       <div className="min-w-0">
-        <p className="text-base leading-relaxed text-foreground">
-          {question.question}
-        </p>
+        {question.question.trim() ? (
+          <MathText
+            as="p"
+            className="text-base leading-relaxed text-foreground"
+            text={question.question}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">Image question</p>
+        )}
+        {getQuestionImages(question).length > 0 ? (
+          <div className="mt-2">
+            <QuestionImages images={getQuestionImages(question)} size="compact" />
+          </div>
+        ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{formatQuestionType(question.type)}</Badge>
           {question.difficulty ? (

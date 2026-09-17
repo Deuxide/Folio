@@ -1,11 +1,20 @@
+import { persistNormalizedOptions } from "@/features/questions/media";
+import { normalizeQuestionType } from "@/features/questions/normalizeQuestionType";
 import type { Question, QuestionSet } from "@/types/question";
 
-function serializeQuestion(question: Question) {
+function serializeQuestion(raw: Question) {
+  const kind = normalizeQuestionType(raw.type);
+  const question =
+    kind === "single_choice" || kind === "multiple_choice"
+      ? persistNormalizedOptions(raw)
+      : raw;
   const exported: Record<string, unknown> = {
     id: question.id,
-    question: question.question,
     type: question.type,
   };
+  if (question.question.trim()) {
+    exported.question = question.question;
+  }
   if (question.options !== undefined) {
     exported.options = question.options;
   }

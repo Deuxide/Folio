@@ -14,6 +14,7 @@ import {
 import { formatDifficultyAverage } from "@/features/statistics/difficultySummary";
 import { computeSubjectStatistics } from "@/features/statistics/subjectStatistics";
 import { findWeakQuestions } from "@/features/statistics/weakQuestions";
+import { MathText } from "@/features/questions/components/MathText";
 import { formatCountdown } from "@/features/study/timer";
 import { QuestionSetRepository } from "@/repositories/QuestionSetRepository";
 import { SessionRepository } from "@/repositories/SessionRepository";
@@ -321,7 +322,13 @@ export function StatisticsPage() {
                       className="rounded-xl border border-border px-4 py-3"
                     >
                       <p className="font-medium">
-                        {question?.question ?? "Question no longer in the set"}
+                        {question?.question?.trim() ? (
+                          <MathText text={question.question} />
+                        ) : question ? (
+                          "Image question"
+                        ) : (
+                          "Question no longer in the set"
+                        )}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {item.reasons.join(" · ")}

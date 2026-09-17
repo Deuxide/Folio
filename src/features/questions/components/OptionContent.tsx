@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ImageOff } from "lucide-react";
 import { ImageViewer } from "@/features/questions/components/ImageViewer";
+import { MathText } from "@/features/questions/components/MathText";
 import type { NormalizedOption } from "@/features/questions/media";
 
 type OptionContentProps = {
@@ -13,7 +14,7 @@ export function OptionContent({ option }: OptionContentProps) {
 
   return (
     <span className="flex min-w-0 flex-col gap-2">
-      {option.text ? <span>{option.text}</span> : null}
+      {option.text ? <MathText text={option.text} /> : null}
       {option.image ? (
         failed ? (
           <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -34,6 +35,7 @@ export function OptionContent({ option }: OptionContentProps) {
               src={option.image.src}
               alt={option.image.alt ?? option.text ?? option.id}
               className="max-h-28 w-full object-contain"
+              loading="lazy"
               onError={() => setFailed(true)}
             />
           </button>

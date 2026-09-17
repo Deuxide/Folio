@@ -47,24 +47,44 @@ export function normalizeImage(value: unknown): QuestionImage | undefined {
 export function normalizeImages(raw: {
   image?: unknown;
   images?: unknown;
+  questionImage?: unknown;
+  questionImages?: unknown;
 }): QuestionImage[] {
   const collected: QuestionImage[] = [];
+  const lists = [raw.images, raw.questionImages];
 
-  if (Array.isArray(raw.images)) {
-    for (const item of raw.images) {
+  for (const list of lists) {
+    if (!Array.isArray(list)) {
+      continue;
+    }
+    for (const item of list) {
       const image = normalizeImage(item);
-      if (image) {
+      if (image && !collected.some((existing) => existing.src === image.src)) {
         collected.push(image);
       }
     }
   }
 
-  const single = normalizeImage(raw.image);
-  if (single && !collected.some((image) => image.src === single.src)) {
-    collected.unshift(single);
+  const singles = [raw.questionImage, raw.image];
+  for (const item of singles) {
+    const image = normalizeImage(item);
+    if (image && !collected.some((existing) => existing.src === image.src)) {
+      collected.unshift(image);
+    }
   }
 
   return collected;
+}
+
+export function hasQuestionContent(question: {
+  question?: string;
+  images?: QuestionImage[];
+}): boolean {
+  return Boolean(question.question?.trim()) || (question.images?.length ?? 0) > 0;
+}
+
+export function hasOptionContent(option: NormalizedOption): boolean {
+  return Boolean(option.text?.trim()) || Boolean(option.image);
 }
 
 export function getQuestionImages(question: Question): QuestionImage[] {
@@ -74,21 +94,46 @@ export function getQuestionImages(question: Question): QuestionImage[] {
   return normalizeImages(question);
 }
 
+export function optionIdFromIndex(index: number): string {
+  if (index >= 0 && index < 26) {
+    return `option-${String.fromCharCode(97 + index)}`;
+  }
+  return `option-${index + 1}`;
+}
+
+function uniqueOptionId(preferred: string, used: Set<string>): string {
+  if (!used.has(preferred)) {
+    return preferred;
+  }
+  let suffix = 2;
+  let next = `${preferred}-${suffix}`;
+  while (used.has(next)) {
+    suffix += 1;
+    next = `${preferred}-${suffix}`;
+  }
+  return next;
+}
+
 export function normalizeOption(
   value: unknown,
   index: number,
+  usedIds = new Set<string>(),
 ): NormalizedOption | undefined {
   if (typeof value === "string") {
     const text = value.trim();
     if (!text) {
       return undefined;
     }
-    return { id: text, text };
+    const id = uniqueOptionId(optionIdFromIndex(index), usedIds);
+    usedIds.add(id);
+    return { id, text };
   }
 
   if (typeof value === "number" || typeof value === "boolean") {
     const text = String(value);
-    return { id: text, text };
+    const id = uniqueOptionId(optionIdFromIndex(index), usedIds);
+    usedIds.add(id);
+    return { id, text };
   }
 
   if (!isRecord(value)) {
@@ -100,14 +145,13 @@ export function normalizeOption(
     asTrimmedString(value.text) ??
     asTrimmedString(value.label) ??
     asTrimmedString(value.value);
-  const id =
-    asTrimmedString(value.id) ??
-    text ??
-    (image ? `option-${index + 1}` : undefined);
-
-  if (!id) {
+  if (!text && !image) {
     return undefined;
   }
+
+  const providedId = asTrimmedString(value.id);
+  const id = uniqueOptionId(providedId ?? optionIdFromIndex(index), usedIds);
+  usedIds.add(id);
 
   const option: NormalizedOption = { id };
   if (text) {
@@ -124,10 +168,48 @@ export function getNormalizedOptions(question: Question): NormalizedOption[] {
     return [];
   }
 
+  const usedIds = new Set<string>();
   return question.options.flatMap((option, index) => {
-    const normalized = normalizeOption(option, index);
+    const normalized = normalizeOption(option, index, usedIds);
     return normalized ? [normalized] : [];
   });
+}
+
+export function serializeNormalizedOption(option: NormalizedOption): Record<string, unknown> {
+  const raw: Record<string, unknown> = { id: option.id };
+  if (option.text) {
+    raw.text = option.text;
+  }
+  if (option.image) {
+    raw.image = option.image.src;
+    if (option.image.alt) {
+      raw.alt = option.image.alt;
+    }
+  }
+  return raw;
+}
+
+export function resolveChoiceAnswer(
+  answer: unknown,
+  options: NormalizedOption[],
+): unknown {
+  if (Array.isArray(answer)) {
+    return answer.map((item) => findOption(options, item)?.id ?? item);
+  }
+  const match = findOption(options, answer);
+  return match ? match.id : answer;
+}
+
+export function persistNormalizedOptions(question: Question): Question {
+  const options = getNormalizedOptions(question);
+  if (options.length === 0) {
+    return question;
+  }
+  return {
+    ...question,
+    options: options.map(serializeNormalizedOption),
+    answer: resolveChoiceAnswer(question.answer, options),
+  };
 }
 
 export function optionMatchesValue(

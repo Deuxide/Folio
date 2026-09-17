@@ -39,6 +39,8 @@ export type ImportedQuestion = {
   topic?: unknown;
   image?: unknown;
   images?: unknown;
+  questionImage?: unknown;
+  questionImages?: unknown;
   difficulty?: unknown;
 };
 

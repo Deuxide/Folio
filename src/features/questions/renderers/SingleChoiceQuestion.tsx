@@ -1,5 +1,5 @@
 import { OptionContent } from "@/features/questions/components/OptionContent";
-import { getNormalizedOptions } from "@/features/questions/media";
+import { findOption, getNormalizedOptions } from "@/features/questions/media";
 import type { Question } from "@/types/question";
 import { ChoiceOption } from "./ChoiceOption";
 
@@ -15,7 +15,7 @@ export function SingleChoiceQuestion({
   onChange,
 }: SingleChoiceQuestionProps) {
   const options = getNormalizedOptions(question);
-  const selected = typeof value === "string" ? value : "";
+  const selectedId = findOption(options, value)?.id;
 
   if (options.length === 0) {
     return (
@@ -34,7 +34,7 @@ export function SingleChoiceQuestion({
           type="radio"
           name={`question-${question.id}`}
           value={option.id}
-          checked={selected === option.id || selected === option.text}
+          checked={selectedId === option.id}
           onChange={() => onChange(option.id)}
         >
           <OptionContent option={option} />

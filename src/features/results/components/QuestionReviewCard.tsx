@@ -1,3 +1,4 @@
+import { MathText } from "@/features/questions/components/MathText";
 import { QuestionImages } from "@/features/questions/components/QuestionImages";
 import { getQuestionImages } from "@/features/questions/media";
 import {
@@ -81,7 +82,9 @@ export function QuestionReviewCard({
 
       {question ? (
         <>
-          <p className="text-base leading-relaxed">{question.question}</p>
+          {question.question.trim() ? (
+            <MathText as="p" className="text-base leading-relaxed" text={question.question} />
+          ) : null}
           <QuestionImages images={getQuestionImages(question)} size="compact" />
         </>
       ) : (
@@ -94,13 +97,13 @@ export function QuestionReviewCard({
         <div>
           <dt className="text-muted-foreground">Your answer</dt>
           <dd className="mt-0.5 font-medium">
-            {userLabel ?? "Not answered"}
+            {userLabel ? <MathText text={userLabel} /> : "Not answered"}
           </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Correct answer</dt>
           <dd className="mt-0.5 font-medium">
-            {correctLabel ?? "Not provided"}
+            {correctLabel ? <MathText text={correctLabel} /> : "Not provided"}
           </dd>
         </div>
         <div>
@@ -122,7 +125,11 @@ export function QuestionReviewCard({
       {question?.explanation ? (
         <div>
           <p className="text-sm text-muted-foreground">Explanation</p>
-          <p className="mt-1 text-sm leading-relaxed">{question.explanation}</p>
+          <MathText
+            as="p"
+            className="mt-1 text-sm leading-relaxed"
+            text={question.explanation}
+          />
         </div>
       ) : null}
 

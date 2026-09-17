@@ -58,12 +58,12 @@ export function QuestionImages({
               ) : (
                 <img
                   src={image.src}
-                  alt={image.alt ?? ""}
+                  alt={image.alt ?? "Question image"}
+                  loading="lazy"
                   className={cn(
                     "h-full w-full object-contain",
                     size === "compact" ? "max-h-40" : "max-h-72",
                   )}
-                  loading="lazy"
                   onError={() => {
                     setFailed((current) => ({ ...current, [image.src]: true }));
                   }}
