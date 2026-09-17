@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ import type { StudySession } from "@/types/session";
 export function SubjectTestSetupPage() {
   const { subjectKey: rawKey } = useParams();
   const subjectKey = rawKey ? decodeURIComponent(rawKey) : "";
+  const [searchParams] = useSearchParams();
+  const scheduledEventId = searchParams.get("event") ?? undefined;
   const navigate = useNavigate();
   const [sets, setSets] = useState<QuestionSet[]>([]);
   const [sessions, setSessions] = useState<StudySession[]>([]);
@@ -138,6 +140,7 @@ export function SubjectTestSetupPage() {
         subjectName,
         sourceSets: selectedSets,
         questionSourceSetIds: pool.sourceByQuestionId,
+        scheduledEventId,
       });
       void navigate(`/subjects/${encodeURIComponent(subjectKey)}/study`);
     } catch (cause) {

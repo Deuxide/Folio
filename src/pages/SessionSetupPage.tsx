@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import type { StudySession } from "@/types/session";
 
 export function SessionSetupPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const scheduledEventId = searchParams.get("event") ?? undefined;
   const navigate = useNavigate();
   const { questionSet, isLoading, error } = useQuestionSet(id);
   const [isStarting, setIsStarting] = useState(false);
@@ -71,7 +73,12 @@ export function SessionSetupPage() {
     setIsStarting(true);
     setStartError(null);
     try {
-      await startStudySession(questionSet, configuration, pool);
+      await startStudySession(
+        questionSet,
+        configuration,
+        pool,
+        scheduledEventId ? { scheduledEventId } : undefined,
+      );
       void navigate(`/sets/${questionSet.id}/study`);
     } catch (cause) {
       setStartError(

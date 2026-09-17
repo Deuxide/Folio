@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { QuestionSetDetailPage } from "@/pages/QuestionSetDetailPage";
 import { QuestionSetsPage } from "@/pages/QuestionSetsPage";
+import { SchedulePage } from "@/pages/SchedulePage";
 import { SessionCompletePage } from "@/pages/SessionCompletePage";
 import { SessionResultsPage } from "@/pages/SessionResultsPage";
 import { SessionSetupPage } from "@/pages/SessionSetupPage";
@@ -20,6 +21,7 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<QuestionSetsPage />} />
+            <Route path="schedule" element={<SchedulePage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="statistics" element={<StatisticsPage />} />
             <Route path="sessions/:sessionId" element={<SessionResultsPage />} />

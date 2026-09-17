@@ -1,14 +1,22 @@
+import { useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { startReminderWatcher, stopReminderWatcher } from "@/features/scheduler/reminderWatcher";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/", label: "Question Sets", end: true },
+  { to: "/schedule", label: "Schedule", end: false },
   { to: "/history", label: "History", end: false },
   { to: "/statistics", label: "Statistics", end: false },
 ];
 
 export function AppShell() {
+  useEffect(() => {
+    startReminderWatcher();
+    return () => stopReminderWatcher();
+  }, []);
+
   return (
     <div className="min-h-dvh bg-background">
       <a

@@ -69,4 +69,5 @@ export type StudySession = {
   sessionDeadline?: string;
   completedAt?: string;
   completionReason?: SessionCompletionReason;
+  scheduledEventId?: string;
 };

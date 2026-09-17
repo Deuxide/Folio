@@ -80,6 +80,7 @@ export function createStudySession(
     subjectName?: string;
     sourceSets?: QuestionSet[];
     questionSourceSetIds?: Record<string, string>;
+    scheduledEventId?: string;
   },
 ): StudySession {
   const startedAtMs = Date.now();
@@ -145,6 +146,9 @@ export function createStudySession(
     session.sourceSetTitles = Object.fromEntries(
       options.sourceSets.map((set) => [set.id, set.title]),
     );
+  }
+  if (options?.scheduledEventId) {
+    session.scheduledEventId = options.scheduledEventId;
   }
   if (options?.questionSourceSetIds) {
     session.questionSourceSetIds = Object.fromEntries(

@@ -1,11 +1,13 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { QuestionSet } from "@/types/question";
+import type { StudyEvent } from "@/types/scheduler";
 import type { StudySession } from "@/types/session";
 
 const DB_NAME = "folio-study";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const QUESTION_SETS_STORE = "questionSets";
 const STUDY_SESSIONS_STORE = "studySessions";
+const STUDY_EVENTS_STORE = "studyEvents";
 
 interface FolioDB extends DBSchema {
   questionSets: {
@@ -20,6 +22,14 @@ interface FolioDB extends DBSchema {
       "by-questionSetId": string;
       "by-status": string;
       "by-startedAt": string;
+    };
+  };
+  studyEvents: {
+    key: string;
+    value: StudyEvent;
+    indexes: {
+      "by-startAt": string;
+      "by-status": string;
     };
   };
 }
@@ -45,6 +55,14 @@ export function getDb(): Promise<IDBPDatabase<FolioDB>> {
           sessions.createIndex("by-status", "status");
           sessions.createIndex("by-startedAt", "startedAt");
         }
+
+        if (!database.objectStoreNames.contains(STUDY_EVENTS_STORE)) {
+          const events = database.createObjectStore(STUDY_EVENTS_STORE, {
+            keyPath: "id",
+          });
+          events.createIndex("by-startAt", "startAt");
+          events.createIndex("by-status", "status");
+        }
       },
     });
   }
@@ -52,4 +70,4 @@ export function getDb(): Promise<IDBPDatabase<FolioDB>> {
   return dbPromise;
 }
 
-export { QUESTION_SETS_STORE, STUDY_SESSIONS_STORE };
+export { QUESTION_SETS_STORE, STUDY_SESSIONS_STORE, STUDY_EVENTS_STORE };

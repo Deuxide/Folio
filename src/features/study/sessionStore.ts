@@ -3,6 +3,7 @@ import { hasUserAnswer } from "@/features/questions/isAnswered";
 import { createStudySession } from "@/features/study/createSession";
 import { withFinalResults } from "@/features/study/finalizeSession";
 import { isDeadlinePassed } from "@/features/study/timer";
+import { markScheduledEventStatus } from "@/features/scheduler/studyAction";
 import { QuestionSetRepository } from "@/repositories/QuestionSetRepository";
 import { SessionRepository } from "@/repositories/SessionRepository";
 import type { QuestionSet } from "@/types/question";
@@ -277,6 +278,10 @@ export function completeStudySession(
       completionReason: reason,
     });
   });
+  const completed = state.session;
+  if (completed?.scheduledEventId) {
+    void markScheduledEventStatus(completed.scheduledEventId, "done");
+  }
 }
 
 export function expireSessionIfNeeded(now = Date.now()): boolean {

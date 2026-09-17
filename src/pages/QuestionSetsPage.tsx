@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { formatEventTimeRange, startOfDay } from "@/features/scheduler/dates";
+import { expandEvents } from "@/features/scheduler/recurrence";
+import { StudyEventRepository } from "@/repositories/StudyEventRepository";
+import type { StudyOccurrence } from "@/types/scheduler";
 import { ImportErrorDialog } from "@/features/question-sets/components/ImportErrorDialog";
 import { ImportQuestionSetButton } from "@/features/question-sets/components/ImportQuestionSetButton";
 import { QuestionSetCard } from "@/features/question-sets/components/QuestionSetCard";
@@ -19,13 +25,19 @@ export function QuestionSetsPage() {
     problems: string[];
   } | null>(null);
   const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [todayStudy, setTodayStudy] = useState<StudyOccurrence[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadSessions() {
       const completed = await SessionRepository.getCompleted();
+      const events = await StudyEventRepository.getAll().catch(() => []);
       if (!cancelled) {
         setSessions(completed);
+        const today = startOfDay(new Date());
+        setTodayStudy(
+          expandEvents(events, today, today).filter((item) => item.source.studyAction),
+        );
       }
     }
     void loadSessions();
@@ -87,6 +99,31 @@ export function QuestionSetsPage() {
           <AlertTitle>Unable to load question sets</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {todayStudy.length > 0 ? (
+        <section className="rounded-2xl border border-border bg-card px-5 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-serif text-xl font-semibold">Upcoming</h2>
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/schedule">View Schedule</Link>
+            </Button>
+          </div>
+          <ul className="mt-3 space-y-2 text-sm">
+            {todayStudy.map((occurrence) => (
+              <li key={`${occurrence.source.id}-${occurrence.dateKey}`}>
+                <span className="text-muted-foreground">
+                  {formatEventTimeRange(
+                    occurrence.startAt,
+                    occurrence.endAt,
+                    occurrence.source.allDay,
+                  )}
+                </span>{" "}
+                {occurrence.source.title}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {isLoading ? (

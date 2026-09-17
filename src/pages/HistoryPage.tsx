@@ -110,6 +110,7 @@ export function HistoryPage() {
                           {formatHistoryDate(
                             session.completedAt ?? session.startedAt,
                           )}
+                          {session.scheduledEventId ? " · Scheduled study" : ""}
                         </p>
                       </div>
                       <p className="text-sm font-medium">
