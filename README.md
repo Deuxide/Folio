@@ -414,6 +414,134 @@ The app should not maintain a separate legacy and modern question system. Normal
 }
 ```
 
+
+## AI Question Generator Prompt
+
+<details>
+<summary>Click to expand the reusable AI prompt</summary>
+
+Copy the prompt below into an AI tool whenever you want to generate a question-bank JSON file for this app.
+
+```text
+You are generating a question bank for a modern question-practice web app.
+
+## User Request
+
+[PASTE YOUR QUESTION GENERATION REQUEST HERE]
+
+## Task
+
+Create a complete question bank based on the user's request.
+
+Infer reasonable defaults when the request does not specify every detail. Generate original, accurate, useful questions appropriate to the requested subject, topic, level, language, difficulty, curriculum, question count, and question types.
+
+Supported question types:
+- single_choice
+- multiple_choice
+- true_false
+- short_answer
+- numeric
+
+## Required JSON Schema
+
+Generate one JSON object with this structure:
+
+{
+  "title": "Question Set Title",
+  "description": "Short description",
+  "subject": "Subject Name",
+  "questions": []
+}
+
+Each question should follow this schema:
+
+{
+  "id": "q-001",
+  "question": "Question text with optional LaTeX",
+  "type": "single_choice",
+  "options": [
+    {
+      "id": "option-a",
+      "text": "Option text"
+    },
+    {
+      "id": "option-b",
+      "text": "Another option"
+    }
+  ],
+  "answer": "option-a",
+  "explanation": "Why this answer is correct.",
+  "difficulty": "medium"
+}
+
+## Important Schema Rules
+
+1. Every question must have a unique stable `id` such as `q-001`, `q-002`, etc.
+2. Every choice option must have a unique stable `id` within its question, such as `option-a`, `option-b`, etc.
+3. For `single_choice`, `answer` must be the ID of the correct option.
+4. For `multiple_choice`, `answer` must be an array of the correct option IDs.
+5. For `true_false`, use boolean `answer` values (`true` or `false`). You may include True/False options with stable IDs when appropriate.
+6. For `short_answer`, `answer` should contain the expected text answer.
+7. For `numeric`, `answer` should be a JSON number, not a formatted string.
+8. `difficulty` may be `easy`, `medium`, or `hard`.
+9. Do not invent difficulty when the user explicitly specifies a difficulty requirement.
+10. `answer` and `explanation` are optional in the app, but include them by default unless the user explicitly asks not to.
+11. Choice options may contain `text`, `image`, or both. Image-only options are valid.
+12. Questions may contain text, images, or both. Image-only questions are valid.
+13. For question images use `questionImage` for one image or `questionImages` for multiple images. Each image should use:
+    {
+      "src": "https://example.com/image.png",
+      "alt": "Useful description of the image",
+      "caption": "Optional caption"
+    }
+14. For option images use:
+    {
+      "src": "https://example.com/image.png",
+      "alt": "Useful description of the image"
+    }
+15. Use direct/external image URLs only when an appropriate image is genuinely needed. Do not fabricate URLs that are supposed to point to real images.
+16. If an image is required but no reliable external image URL is available, prefer generating a text-based question instead of inventing a URL.
+
+## Math / LaTeX
+
+Math may be written using LaTeX inside JSON strings.
+
+Use inline math such as:
+"Solve $x^2 - 5x + 6 = 0$."
+
+For more complex expressions, use the app's supported LaTeX delimiters consistently. Escape backslashes correctly for JSON, for example `\\frac{a}{b}` inside a JSON string.
+
+Do not replace mathematical notation with poorly formatted plain text when LaTeX would make it clearer.
+
+## Question Quality
+
+- Make every question unambiguous.
+- Ensure every answer key is actually correct.
+- For multiple-choice questions, make distractors plausible but clearly incorrect.
+- Do not accidentally create multiple correct answers for a single-choice question.
+- Avoid duplicate or near-duplicate questions unless repetition is explicitly requested.
+- Match the requested educational level.
+- Keep explanations concise but useful.
+- Use the requested language.
+- For numeric questions, make sure the expected answer follows directly from the stated information.
+- Do not include unsupported claims or fabricated facts.
+
+## Output Requirements
+
+Do NOT paste the complete JSON into the chat response.
+
+Instead:
+1. Create a `.json` file containing the generated question bank.
+2. Validate that the file is valid JSON before providing it.
+3. Use a sensible filename based on the subject/topic, for example `physics-kinematics.json`.
+4. Provide the user with a clickable download link to the generated `.json` file.
+5. Briefly state what was generated (question count, subject/topic, and question types) without dumping the JSON into the chat.
+
+The final JSON must be directly importable by the Study App described above.
+```
+
+</details>
+
 ---
 
 # Running the App
