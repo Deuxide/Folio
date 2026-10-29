@@ -13,6 +13,7 @@ export function createDefaultSessionConfiguration(
   availableCount: number,
 ): SessionConfiguration {
   return {
+    mode: "test",
     selectionMode: "all",
     questionCount: Math.max(availableCount, 1),
     randomizeQuestions: false,
@@ -81,6 +82,9 @@ export function createStudySession(
     subjectKey?: string;
     subjectName?: string;
     sourceSets?: QuestionSet[];
+    /** Bank titles keyed by set id — used when the QuestionSet objects
+     *  themselves are not loaded (they are reconstructed for retries). */
+    sourceSetTitles?: Record<string, string>;
     questionSourceSetIds?: Record<string, string>;
     scheduledEventId?: string;
   },
@@ -132,6 +136,7 @@ export function createStudySession(
     id: createId("session"),
     questionSetId: questionSet.id,
     questionSetTitle: questionSet.title,
+    mode: configuration.mode ?? "test",
     questionIds,
     currentIndex: 0,
     attempts,
@@ -155,6 +160,9 @@ export function createStudySession(
     session.sourceSetTitles = Object.fromEntries(
       options.sourceSets.map((set) => [set.id, set.title]),
     );
+  } else if (options?.sourceSetTitles && Object.keys(options.sourceSetTitles).length > 0) {
+    session.sourceSetTitles = options.sourceSetTitles;
+    session.sourceSetIds = Object.keys(options.sourceSetTitles);
   }
   if (options?.scheduledEventId) {
     session.scheduledEventId = options.scheduledEventId;

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { extractHistoryEntries } from "@/features/history/extractAttempts";
 import { SessionResultsView } from "@/features/results/components/SessionResultsView";
-import { loadSession, useStudySessionState } from "@/features/study/sessionStore";
+import { loadSession, setSelfGrading, useStudySessionState } from "@/features/study/sessionStore";
 import { SessionRepository } from "@/repositories/SessionRepository";
 import type { StudySession } from "@/types/session";
 
@@ -87,6 +87,9 @@ export function SubjectSessionCompletePage() {
       questions={Object.values(session.questionSnapshots ?? {})}
       history={history}
       title={`${session.subjectName ?? "Subject"} Test`}
+      onSelfGrade={(questionId, selfGrading) => {
+        setSelfGrading(questionId, selfGrading);
+      }}
     />
   );
 }

@@ -9,6 +9,7 @@ const NAV = [
   { to: "/schedule", label: "Schedule", end: false },
   { to: "/history", label: "History", end: false },
   { to: "/statistics", label: "Statistics", end: false },
+  { to: "/data", label: "Data", end: false },
 ];
 
 export function AppShell() {

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Flag } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MathText } from "@/features/questions/components/MathText";
 import { QuestionImages } from "@/features/questions/components/QuestionImages";
 import { getQuestionImages } from "@/features/questions/media";
 import { QuestionRenderer } from "@/features/questions/renderers/QuestionRenderer";
+import { ConfidenceSelector } from "@/features/study/components/ConfidenceSelector";
+import { LearnFeedbackPanel } from "@/features/study/components/LearnFeedbackPanel";
 import { hasUserAnswer } from "@/features/questions/isAnswered";
 import { DifficultySelector } from "@/features/study/components/DifficultySelector";
 import { ExitSessionDialog } from "@/features/study/components/ExitSessionDialog";
@@ -20,6 +22,7 @@ import {
   questionSourceLabel,
 } from "@/features/study/sessionPaths";
 import {
+  checkCurrentAnswer,
   completeStudySession,
   countAnsweredQuestions,
   discardStudySession,
@@ -27,6 +30,7 @@ import {
   expireSessionIfNeeded,
   setCurrentQuestionIndex,
   setDifficulty,
+  setQuestionConfidence,
   setUserAnswer,
   timeoutCurrentQuestionAndAdvance,
 } from "@/features/study/sessionStore";
@@ -64,6 +68,13 @@ export function StudySessionView({
   const isTimedOut = Boolean(currentAttempt?.timedOut);
   const isLast = currentIndex >= total - 1;
   const answeredCount = countAnsweredQuestions(session);
+  const isLearnMode = (session.mode ?? "test") === "learn";
+  const isChecked = Boolean(currentAttempt?.result);
+  const showLearnFeedback =
+    isLearnMode &&
+    question !== undefined &&
+    currentAttempt !== undefined &&
+    (isChecked || isTimedOut);
 
   const { sessionRemainingMs, questionRemainingMs } = useSessionTimers(session, {
     enabled: timersEnabled && session.status === "in_progress",
@@ -206,12 +217,20 @@ export function StudySessionView({
             className={
               isTimedOut
                 ? "rounded-full bg-destructive/10 px-2.5 py-1 text-destructive"
-                : isAnswered
+                : isChecked
                   ? "rounded-full bg-primary/10 px-2.5 py-1 text-primary"
-                  : "rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
+                  : isAnswered
+                    ? "rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
+                    : "rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
             }
           >
-            {isTimedOut ? "Timed out" : isAnswered ? "Answered" : "Unanswered"}
+            {isTimedOut
+              ? "Timed out"
+              : isChecked
+                ? "Checked"
+                : isAnswered
+                  ? "Answered"
+                  : "Unanswered"}
           </span>
         </div>
         {questionSourceLabel(session, question.id) ? (
@@ -231,16 +250,47 @@ export function StudySessionView({
             <QuestionImages images={getQuestionImages(question)} />
           </div>
         ) : null}
-        <div className="mt-6 rounded-xl border border-border/80 bg-background/70 p-4">
-          <p className="mb-3 text-sm font-medium text-muted-foreground">
-            Your answer
-          </p>
-          <QuestionRenderer
-            question={question}
-            value={currentAttempt?.userAnswer}
-            onChange={(value) => setUserAnswer(question.id, value)}
-          />
-        </div>
+        {showLearnFeedback && question && currentAttempt ? (
+          <div className="mt-6">
+            <LearnFeedbackPanel question={question} attempt={currentAttempt} />
+          </div>
+        ) : (
+          <div className="mt-6 rounded-xl border border-border/80 bg-background/70 p-4">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">
+              Your answer
+            </p>
+            <QuestionRenderer
+              question={question}
+              value={currentAttempt?.userAnswer}
+              onChange={(value) => setUserAnswer(question.id, value)}
+            />
+            {isLearnMode ? (
+              <div className="mt-4 border-t border-border/80 pt-3">
+                <ConfidenceSelector
+                  value={currentAttempt?.confidence}
+                  onChange={(confidence) =>
+                    setQuestionConfidence(question.id, confidence)
+                  }
+                />
+              </div>
+            ) : null}
+          </div>
+        )}
+        {!showLearnFeedback && isLearnMode && isAnswered ? (
+          <div className="mt-4 flex justify-end">
+            <Button
+              type="button"
+              onClick={() => {
+                if (question) {
+                  checkCurrentAnswer(question);
+                }
+              }}
+            >
+              <CheckCircle2 />
+              Check answer
+            </Button>
+          </div>
+        ) : null}
         <div className="mt-6 border-t border-border pt-5">
           <DifficultySelector
             value={currentAttempt?.difficulty ?? question.difficulty}
@@ -261,7 +311,7 @@ export function StudySessionView({
         </Button>
         {isLast ? (
           <Button type="button" onClick={handleFinish}>
-            <Flag />
+            <CheckCircle2 />
             Finish Session
           </Button>
         ) : (

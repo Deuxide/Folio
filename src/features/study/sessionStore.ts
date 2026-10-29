@@ -1,13 +1,17 @@
 import { useSyncExternalStore } from "react";
+import { gradeQuestion } from "@/features/grading/gradeQuestion";
+import { withAttemptSelfGrading } from "@/features/grading/attemptOutcome";
 import { hasUserAnswer } from "@/features/questions/isAnswered";
+import { updateMemoryForSession } from "@/features/mastery/memoryUpdate";
 import { createStudySession } from "@/features/study/createSession";
 import { withFinalResults } from "@/features/study/finalizeSession";
 import { isDeadlinePassed } from "@/features/study/timer";
 import { markScheduledEventStatus } from "@/features/scheduler/studyAction";
 import { QuestionSetRepository } from "@/repositories/QuestionSetRepository";
 import { SessionRepository } from "@/repositories/SessionRepository";
-import type { QuestionSet } from "@/types/question";
+import type { Question, QuestionSet } from "@/types/question";
 import type {
+  ConfidenceRating,
   DifficultyRating,
   QuestionAttempt,
   SessionCompletionReason,
@@ -48,11 +52,22 @@ function updateSession(updater: (session: StudySession) => StudySession) {
   if (!state.session) {
     return;
   }
-  const nextSession = updater(state.session);
-  if (nextSession === state.session) {
+  const previous = state.session;
+  const nextSession = updater(previous);
+  if (nextSession === previous) {
     return;
   }
   setState({ ...state, session: nextSession });
+  // A session just finalized: fold its outcomes into the per-question
+  // learning memory. Best-effort — must never block the study flow.
+  if (
+    nextSession.status === "completed" &&
+    previous.status !== "completed"
+  ) {
+    void updateMemoryForSession(nextSession).catch(() => {
+      // Memory can always be rebuilt from history if this fails.
+    });
+  }
 }
 
 export function getSessionState(): SessionState {
@@ -76,21 +91,47 @@ export function loadSession(
   });
 }
 
+export type StartSessionResult =
+  | { ok: true; session: StudySession }
+  | { ok: false; reason: "conflict"; activeSession: StudySession };
+
+/**
+ * Starts a session for the given bank/pool. An unfinished session in the
+ * same scope (question set or subject) is never deleted implicitly: the
+ * caller receives `{ok: false, reason: "conflict"}` and may call again with
+ * `discardActive: true` after the user has explicitly agreed.
+ */
 export async function startStudySession(
   questionSet: QuestionSet,
   configuration: SessionConfiguration,
   pool = questionSet.questions,
-  options?: Parameters<typeof createStudySession>[3],
-): Promise<StudySession> {
-  if (options?.kind === "subject" && options.subjectKey) {
-    await SessionRepository.deleteInProgressForSubject(options.subjectKey);
-  } else {
-    await SessionRepository.deleteInProgressForQuestionSet(questionSet.id);
+  options?: Parameters<typeof createStudySession>[3] & {
+    discardActive?: boolean;
+  },
+): Promise<StartSessionResult> {
+  const isSubjectSession =
+    options?.kind === "subject" && Boolean(options.subjectKey);
+  const activeSession = isSubjectSession
+    ? await SessionRepository.getInProgressBySubjectKey(options!.subjectKey!)
+    : await SessionRepository.getInProgressByQuestionSetId(questionSet.id);
+
+  if (activeSession && !options?.discardActive) {
+    return { ok: false, reason: "conflict", activeSession };
   }
+
+  if (activeSession) {
+    // The user consented to discarding the unfinished session.
+    if (isSubjectSession) {
+      await SessionRepository.deleteInProgressForSubject(options!.subjectKey!);
+    } else {
+      await SessionRepository.deleteInProgressForQuestionSet(questionSet.id);
+    }
+  }
+
   const session = createStudySession(questionSet, configuration, pool, options);
   setState({ session, pendingResume: false });
   await SessionRepository.save(session);
-  return session;
+  return { ok: true, session };
 }
 
 export function acknowledgeResume() {
@@ -168,6 +209,18 @@ export function setUserAnswer(questionId: string, userAnswer: unknown) {
       questionId,
       userAnswer,
     };
+    // A new answer invalidates a previously captured outcome (Learn mode
+    // re-locks the question for checking); the old result is not historical
+    // data, it belonged to the replaced answer.
+    if (
+      attempt.result !== undefined ||
+      attempt.checkedAt !== undefined ||
+      attempt.partialCredit !== undefined
+    ) {
+      delete attempt.result;
+      delete attempt.checkedAt;
+      delete attempt.partialCredit;
+    }
     return {
       ...session,
       attempts: {
@@ -176,6 +229,103 @@ export function setUserAnswer(questionId: string, userAnswer: unknown) {
       },
     };
   });
+}
+
+/**
+ * Learn mode: grade the current answer now and freeze the outcome on the
+ * attempt. This is the only place session answers are graded mid-session;
+ * the stored result is authoritative afterwards.
+ */
+export function checkCurrentAnswer(question: Question) {
+  updateSession((session) => {
+    if (session.status !== "in_progress") {
+      return session;
+    }
+    const questionId = session.questionIds[session.currentIndex];
+    if (!questionId || questionId !== question.id) {
+      return session;
+    }
+    const attempt = session.attempts[questionId];
+    if (!attempt || attempt.result !== undefined) {
+      // Nothing answered, or the outcome is already recorded.
+      return session;
+    }
+    if (!hasUserAnswer(attempt.userAnswer)) {
+      return session;
+    }
+    const outcome = gradeQuestion(question, attempt.userAnswer);
+    const checkedAttempt: QuestionAttempt = {
+      ...attempt,
+      questionId,
+      result: outcome.status,
+      checkedAt: new Date().toISOString(),
+    };
+    if (typeof outcome.credit === "number") {
+      checkedAttempt.partialCredit = outcome.credit;
+    }
+    return {
+      ...session,
+      attempts: {
+        ...session.attempts,
+        [questionId]: checkedAttempt,
+      },
+    };
+  });
+}
+
+export function setQuestionConfidence(
+  questionId: string,
+  confidence: ConfidenceRating | undefined,
+) {
+  updateSession((session) => {
+    if (session.status !== "in_progress") {
+      return session;
+    }
+    const attempt = session.attempts[questionId];
+    if (attempt?.result !== undefined) {
+      // The question has been checked; confidence was assessed before that.
+      return session;
+    }
+    const base = attempt ?? { questionId };
+    const next: QuestionAttempt = { ...base, questionId };
+    if (confidence) {
+      next.confidence = confidence;
+    } else {
+      delete next.confidence;
+    }
+    return {
+      ...session,
+      attempts: {
+        ...session.attempts,
+        [questionId]: next,
+      },
+    };
+  });
+}
+
+/**
+ * Records the user's manual grade for an ungraded question on a completed
+ * session. Never touches outcomes for questions with an answer key.
+ */
+export function setSelfGrading(
+  questionId: string,
+  selfGrading: "correct" | "incorrect",
+) {
+  const before = state.session;
+  updateSession((session) => {
+    if (session.status !== "completed") {
+      return session;
+    }
+    return withAttemptSelfGrading(session, questionId, selfGrading);
+  });
+  // Self-grading changes a stored outcome after completion → refresh the
+  // question's memory so the replay uses the new result.
+  const after = state.session;
+  if (after && after !== before && after.status === "completed") {
+    void updateMemoryForSession(after).catch(() => {
+      // Memory can always be rebuilt from history if this fails.
+    });
+  }
 }
 
 export function ensureQuestionTiming(questionId: string) {

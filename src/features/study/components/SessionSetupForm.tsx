@@ -68,6 +68,35 @@ export function SessionSetupForm({
   return (
     <form className="space-y-8" onSubmit={(event) => void handleSubmit(event)}>
       <section className="space-y-3">
+        <h2 className="font-medium">Session mode</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <ConfigChoice
+            name="mode"
+            value="learn"
+            checked={configuration.mode === "learn"}
+            label="Learn"
+            description="Check each answer for instant feedback and an explanation"
+            onChange={() => update({ mode: "learn" })}
+          />
+          <ConfigChoice
+            name="mode"
+            value="test"
+            checked={(configuration.mode ?? "test") === "test"}
+            label="Test"
+            description="Answer everything first, then review with explanations at the end"
+            onChange={() => update({ mode: "test" })}
+          />
+        </div>
+        {configuration.mode === "learn" ? (
+          <p className="text-xs text-muted-foreground">
+            Learn mode ignores exam-style pacing: answers are locked and graded
+            the moment you reveal them. Time limits still mark questions as
+            timed out.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="font-medium">Practice focus</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {(

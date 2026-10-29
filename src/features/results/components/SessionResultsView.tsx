@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { CheckCircle2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { QuestionHistoryEntry } from "@/features/history/extractAttempts";
 import { summarizeSession } from "@/features/grading/summarizeSession";
 import { QuestionReviewCard } from "@/features/results/components/QuestionReviewCard";
@@ -14,8 +24,13 @@ import {
   isSubjectSession,
   questionSourceLabel,
   sessionSetupPath,
+  sessionStudyPath,
 } from "@/features/study/sessionPaths";
 import { clearStudySession } from "@/features/study/sessionStore";
+import {
+  getMissedQuestionIds,
+  startRetrySession,
+} from "@/features/study/retrySession";
 import { formatCountdown } from "@/features/study/timer";
 import type { Question } from "@/types/question";
 import type { DifficultyRating, StudySession } from "@/types/session";
@@ -25,6 +40,7 @@ type SessionResultsViewProps = {
   questions: Question[];
   history?: QuestionHistoryEntry[];
   title?: string;
+  onSelfGrade?: (questionId: string, grade: "correct" | "incorrect") => void;
 };
 
 export function SessionResultsView({
@@ -32,15 +48,51 @@ export function SessionResultsView({
   questions,
   history = [],
   title = "Session Complete",
+  onSelfGrade,
 }: SessionResultsViewProps) {
+  const navigate = useNavigate();
   const [resultFilters, setResultFilters] = useState<ResultFilter[]>([]);
   const [difficultyFilters, setDifficultyFilters] = useState<DifficultyRating[]>(
     [],
   );
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [isStartingRetry, setIsStartingRetry] = useState(false);
   const summary = useMemo(
     () => summarizeSession(session, questions),
     [questions, session],
   );
+  const missedCount = useMemo(
+    () => getMissedQuestionIds(session).length,
+    [session],
+  );
+
+  async function handlePracticeMissed(discardActive: boolean) {
+    setRetryError(null);
+    setIsStartingRetry(true);
+    try {
+      const result = await startRetrySession(session, { discardActive });
+      if (result.ok) {
+        void navigate(sessionStudyPath(session));
+        return;
+      }
+      if (result.reason === "conflict") {
+        setConflictOpen(true);
+        return;
+      }
+      setRetryError(
+        "There is nothing to practice yet: this session has no missed questions.",
+      );
+    } catch (cause) {
+      setRetryError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to start the practice session.",
+      );
+    } finally {
+      setIsStartingRetry(false);
+    }
+  }
 
   const visibleReviews = summary.reviews.filter((review) => {
     if (resultFilters.length > 0) {
@@ -163,6 +215,20 @@ export function SessionResultsView({
         </div>
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+          {missedCount > 0 ? (
+            <Button
+              type="button"
+              onClick={() => {
+                void handlePracticeMissed(false);
+              }}
+              disabled={isStartingRetry}
+            >
+              <RotateCcw />
+              {isStartingRetry
+                ? "Starting…"
+                : `Practice missed (${missedCount})`}
+            </Button>
+          ) : null}
           <Button asChild>
             <a href="#review">Review Questions</a>
           </Button>
@@ -178,6 +244,11 @@ export function SessionResultsView({
             </Link>
           </Button>
         </div>
+        {retryError ? (
+          <p className="mt-3 text-sm text-destructive" role="alert">
+            {retryError}
+          </p>
+        ) : null}
       </section>
 
       <section id="review" className="space-y-4">
@@ -221,11 +292,42 @@ export function SessionResultsView({
                 history={history.filter(
                   (entry) => entry.questionId === review.questionId,
                 )}
+                onSelfGrade={
+                  onSelfGrade
+                    ? (grade) => onSelfGrade(review.questionId, grade)
+                    : undefined
+                }
               />
             ))}
           </div>
         )}
       </section>
+
+      <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your unfinished session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              There is an unfinished session with progress saved on this
+              device. Starting the missed-questions practice discards it —
+              answers that were already given are removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConflictOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConflictOpen(false);
+                void handlePracticeMissed(true);
+              }}
+            >
+              Discard and practice
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

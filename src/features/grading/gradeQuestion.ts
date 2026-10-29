@@ -8,13 +8,32 @@ import {
   isSupportedQuestionType,
   normalizeQuestionType,
 } from "@/features/questions/normalizeQuestionType";
-import type { GradingStatus } from "@/types/grading";
+import {
+  normalizeShortAnswer,
+  normalizeShortAnswers,
+  parseNumericValue,
+  stripUnitSuffix,
+} from "@/features/grading/normalize";
+import type { GradingResult, GradingStatus } from "@/types/grading";
 import type { Question } from "@/types/question";
 
-export type { GradingStatus };
+export type { GradingResult, GradingStatus };
 
-export type GradingResult = {
-  status: GradingStatus;
+/**
+ * Which grading rules apply.
+ *
+ * - `enhanced`: current rules — forgiving short-answer normalization,
+ *   numeric tolerance/units, optional partial credit.
+ * - `legacy`: the exact pre-upgrade rules, used when finishing a session
+ *   that was started before these rules existed so historical data is never
+ *   re-graded. Questions carrying the new optional fields (`acceptedAnswers`,
+ *   `tolerance`, `relativeTolerance`, `unit`, `partialCredit`) could not
+ *   exist in such sessions, so legacy grading is always faithful.
+ */
+export type GradingMode = "enhanced" | "legacy";
+
+export type GradingOptions = {
+  grading?: GradingMode;
 };
 
 function hasAnswerKey(question: Question): boolean {
@@ -76,6 +95,7 @@ export function gradeSingleChoice(
 export function gradeMultipleChoice(
   question: Question,
   userAnswer: unknown,
+  grading: GradingMode = "enhanced",
 ): GradingResult {
   const options = getNormalizedOptions(question);
   const expectedValues = asStringList(question.answer);
@@ -95,17 +115,29 @@ export function gradeMultipleChoice(
       .sort(),
   );
 
-  if (expectedIds.size !== selectedIds.size) {
-    return { status: "incorrect" };
+  const isFullMatch =
+    expectedIds.size === selectedIds.size &&
+    [...expectedIds].every((id) => selectedIds.has(id));
+
+  if (isFullMatch) {
+    return { status: "correct" };
   }
 
-  for (const id of expectedIds) {
-    if (!selectedIds.has(id)) {
-      return { status: "incorrect" };
-    }
+  // Partial credit is opt-in per question and only exists for enhanced
+  // grading; legacy sessions stay strictly all-or-nothing.
+  if (grading === "enhanced" && question.partialCredit === true) {
+    const hits = [...expectedIds].filter((id) => selectedIds.has(id)).length;
+    const falsePositives = [...selectedIds].filter(
+      (id) => !expectedIds.has(id),
+    ).length;
+    const credit = Math.max(
+      0,
+      Math.round(((hits - falsePositives) / expectedIds.size) * 100) / 100,
+    );
+    return { status: "incorrect", credit };
   }
 
-  return { status: "correct" };
+  return { status: "incorrect" };
 }
 
 export function gradeTrueFalse(
@@ -126,6 +158,7 @@ export function gradeTrueFalse(
 export function gradeShortAnswer(
   question: Question,
   userAnswer: unknown,
+  grading: GradingMode = "enhanced",
 ): GradingResult {
   if (typeof question.answer !== "string") {
     return { status: "ungraded" };
@@ -133,32 +166,111 @@ export function gradeShortAnswer(
   if (typeof userAnswer !== "string") {
     return { status: "incorrect" };
   }
+
+  if (grading === "legacy") {
+    const correct =
+      question.answer.trim().toLowerCase() ===
+      userAnswer.trim().toLowerCase();
+    return { status: correct ? "correct" : "incorrect" };
+  }
+
+  const keys = normalizeShortAnswerKeys(question.answer, question.acceptedAnswers);
+  const actual = normalizeShortAnswer(userAnswer);
+  if (!actual) {
+    return { status: "incorrect" };
+  }
   return {
-    status:
-      question.answer.trim().toLowerCase() === userAnswer.trim().toLowerCase()
-        ? "correct"
-        : "incorrect",
+    status: keys.includes(actual) ? "correct" : "incorrect",
   };
+}
+
+function normalizeShortAnswerKeys(
+  answerKey: unknown,
+  acceptedAnswers: unknown,
+): string[] {
+  const keys: string[] = [];
+  if (typeof answerKey === "string") {
+    keys.push(normalizeShortAnswer(answerKey));
+  }
+  for (const extra of normalizeShortAnswers(acceptedAnswers)) {
+    if (!keys.includes(extra)) {
+      keys.push(extra);
+    }
+  }
+  return keys;
 }
 
 export function gradeNumeric(
   question: Question,
   userAnswer: unknown,
+  grading: GradingMode = "enhanced",
 ): GradingResult {
-  const expected = toFiniteNumber(question.answer);
+  // Legacy keeps the original key parser so legacy string keys ("84,5")
+  // that never parsed continue to grade as ungraded, exactly as before.
+  const expected =
+    grading === "legacy"
+      ? toFiniteNumber(question.answer)
+      : parseNumericValue(question.answer);
   if (expected === undefined) {
     return { status: "ungraded" };
   }
-  const actual = toFiniteNumber(userAnswer);
+
+  if (grading === "legacy") {
+    const actual = toFiniteNumber(userAnswer);
+    if (actual === undefined) {
+      return { status: "incorrect" };
+    }
+    return { status: expected === actual ? "correct" : "incorrect" };
+  }
+
+  const actual = parseTypedNumeric(userAnswer, question.unit);
   if (actual === undefined) {
     return { status: "incorrect" };
   }
-  return { status: expected === actual ? "correct" : "incorrect" };
+
+  const tolerance = numericTolerance(question, expected);
+  return {
+    status: Math.abs(actual - expected) <= tolerance ? "correct" : "incorrect",
+  };
+}
+
+function parseTypedNumeric(
+  userAnswer: unknown,
+  unit: string | undefined,
+): number | undefined {
+  if (typeof userAnswer !== "string") {
+    return parseNumericValue(userAnswer);
+  }
+  if (!unit) {
+    return parseNumericValue(userAnswer);
+  }
+  // Accept the value with or without the expected unit tacked on. If the
+  // unit-stripped text is not a number, fall back to the raw text.
+  const stripped = stripUnitSuffix(userAnswer, unit);
+  const parsed = parseNumericValue(stripped);
+  return parsed === undefined ? parseNumericValue(userAnswer) : parsed;
+}
+
+function numericTolerance(question: Question, expected: number): number {
+  if (
+    typeof question.tolerance === "number" &&
+    Number.isFinite(question.tolerance)
+  ) {
+    return Math.abs(question.tolerance);
+  }
+  if (
+    typeof question.relativeTolerance === "number" &&
+    Number.isFinite(question.relativeTolerance)
+  ) {
+    return Math.abs(question.relativeTolerance) * Math.abs(expected);
+  }
+  return 0;
 }
 
 export function gradeQuestion(
   question: Question,
   userAnswer: unknown,
+  options?: GradingOptions,
 ): GradingResult {
   if (!hasAnswerKey(question)) {
     return {
@@ -170,6 +282,7 @@ export function gradeQuestion(
     return { status: "unanswered" };
   }
 
+  const grading = options?.grading ?? "enhanced";
   const type = normalizeQuestionType(question.type);
   if (!isSupportedQuestionType(type)) {
     return { status: "ungraded" };
@@ -179,13 +292,13 @@ export function gradeQuestion(
     case "single_choice":
       return gradeSingleChoice(question, userAnswer);
     case "multiple_choice":
-      return gradeMultipleChoice(question, userAnswer);
+      return gradeMultipleChoice(question, userAnswer, grading);
     case "true_false":
       return gradeTrueFalse(question, userAnswer);
     case "short_answer":
-      return gradeShortAnswer(question, userAnswer);
+      return gradeShortAnswer(question, userAnswer, grading);
     case "numeric":
-      return gradeNumeric(question, userAnswer);
+      return gradeNumeric(question, userAnswer, grading);
     default:
       return { status: "ungraded" };
   }

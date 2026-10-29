@@ -1,19 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { extractHistoryEntries } from "@/features/history/extractAttempts";
+import { formatHistoryDate } from "@/features/history/formatDate";
 import {
   formatBankSubject,
   normalizeSubjectKey,
 } from "@/features/question-sets/subject";
+import { ResumeSessionBanner } from "@/features/study/components/ResumeSessionBanner";
 import { SessionSetupForm } from "@/features/study/components/SessionSetupForm";
-import { startStudySession } from "@/features/study/sessionStore";
+import {
+  loadSession,
+  discardStudySession,
+  completeStudySession,
+  startStudySession,
+} from "@/features/study/sessionStore";
 import {
   buildSubjectPool,
   virtualSubjectSet,
 } from "@/features/study/subjectPool";
+import { isDeadlinePassed } from "@/features/study/timer";
 import { QuestionSetRepository } from "@/repositories/QuestionSetRepository";
 import { SessionRepository } from "@/repositories/SessionRepository";
 import type { PracticeFocus, SessionConfiguration } from "@/types/session";
@@ -33,6 +51,10 @@ export function SubjectTestSetupPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [inProgress, setInProgress] = useState<StudySession | null>(null);
+  const [pendingStart, setPendingStart] = useState<SessionConfiguration | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +98,29 @@ export function SubjectTestSetupPage() {
     };
   }, [subjectKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadActive() {
+      const active = await SessionRepository.getInProgressBySubjectKey(
+        subjectKey,
+      );
+      if (cancelled) {
+        return;
+      }
+      if (active && isDeadlinePassed(active.sessionDeadline)) {
+        loadSession(active);
+        completeStudySession("session_timer");
+        setInProgress(null);
+      } else {
+        setInProgress(active ?? null);
+      }
+    }
+    void loadActive();
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectKey]);
+
   const subjectName = formatBankSubject(sets[0]?.subject);
   const selectedSets = useMemo(
     () => sets.filter((set) => selectedIds.includes(set.id)),
@@ -107,7 +152,10 @@ export function SubjectTestSetupPage() {
     setStartError(null);
   }
 
-  async function handleStart(configuration: SessionConfiguration) {
+  async function performStart(
+    configuration: SessionConfiguration,
+    discardActive: boolean,
+  ) {
     if (selectedSets.length === 0) {
       setStartError("Select at least one question bank.");
       return;
@@ -131,17 +179,31 @@ export function SubjectTestSetupPage() {
         subjectName,
         pool.questions,
       );
-      await startStudySession(virtualSet, {
-        ...configuration,
-        selectedSetIds: selectedSets.map((set) => set.id),
-      }, pool.questions, {
+      const startOptions: Parameters<typeof startStudySession>[3] = {
         kind: "subject",
         subjectKey,
         subjectName,
         sourceSets: selectedSets,
         questionSourceSetIds: pool.sourceByQuestionId,
-        scheduledEventId,
-      });
+        discardActive,
+      };
+      if (scheduledEventId) {
+        startOptions.scheduledEventId = scheduledEventId;
+      }
+      const result = await startStudySession(
+        virtualSet,
+        {
+          ...configuration,
+          selectedSetIds: selectedSets.map((set) => set.id),
+        },
+        pool.questions,
+        startOptions,
+      );
+      if (!result.ok) {
+        // An unfinished subject session exists; ask before discarding it.
+        setPendingStart(configuration);
+        return;
+      }
       void navigate(`/subjects/${encodeURIComponent(subjectKey)}/study`);
     } catch (cause) {
       setStartError(
@@ -152,6 +214,17 @@ export function SubjectTestSetupPage() {
     } finally {
       setIsStarting(false);
     }
+  }
+
+  function handleDiscardActive() {
+    const active = inProgress;
+    if (!active) {
+      return;
+    }
+    loadSession(active);
+    void discardStudySession().then(() => {
+      setInProgress(null);
+    });
   }
 
   return (
@@ -230,15 +303,64 @@ export function SubjectTestSetupPage() {
             </Alert>
           ) : null}
 
+          {inProgress ? (
+            <ResumeSessionBanner
+              prompt="You have an unfinished session"
+              description={
+                <p>
+                  {inProgress.questionSetTitle} · Question{" "}
+                  {inProgress.currentIndex + 1} of{" "}
+                  {inProgress.questionIds.length} · started{" "}
+                  {formatHistoryDate(inProgress.startedAt)}
+                </p>
+              }
+              resumeTo={`/subjects/${encodeURIComponent(subjectKey)}/study`}
+              onDiscard={handleDiscardActive}
+            />
+          ) : null}
+
           <SessionSetupForm
             availableCount={practiceCounts.all ?? 0}
             practiceCounts={practiceCounts}
             isStarting={isStarting}
             showDistribution={selectedSets.length > 1}
-            onStart={handleStart}
+            onStart={(configuration) => void performStart(configuration, false)}
           />
         </>
       )}
+
+      <AlertDialog
+        open={pendingStart !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingStart(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unfinished session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Starting fresh will discard the unfinished session for{" "}
+              {subjectName}, including any answers you already gave in it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep unfinished session</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const configuration = pendingStart;
+                setPendingStart(null);
+                if (configuration) {
+                  void performStart(configuration, true);
+                }
+              }}
+            >
+              Discard &amp; start fresh
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

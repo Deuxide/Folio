@@ -1,7 +1,11 @@
-import { gradeQuestion, type GradingStatus } from "@/features/grading/gradeQuestion";
-import { hasUserAnswer } from "@/features/questions/isAnswered";
+import { resolveAttemptOutcome } from "@/features/grading/attemptOutcome";
+import type { GradingStatus } from "@/types/grading";
 import type { Question } from "@/types/question";
-import type { DifficultyRating, StudySession } from "@/types/session";
+import type {
+  ConfidenceRating,
+  DifficultyRating,
+  StudySession,
+} from "@/types/session";
 
 export type ReviewedQuestion = {
   questionId: string;
@@ -9,6 +13,11 @@ export type ReviewedQuestion = {
   question?: Question;
   userAnswer: unknown;
   status: GradingStatus;
+  /** Partial credit (0–1) for multiple-choice questions that opted in. */
+  credit?: number;
+  /** True when the displayed outcome came from the user's own grade. */
+  selfGraded?: boolean;
+  confidence?: ConfidenceRating;
   difficulty?: DifficultyRating;
   timedOut: boolean;
   timeSpentMs?: number;
@@ -48,22 +57,24 @@ export function summarizeSession(
         session.questionSnapshots?.[questionId] ?? questionsById.get(questionId);
       const attempt = session.attempts[questionId];
       const userAnswer = attempt?.userAnswer;
-      const gradingStatus: GradingStatus =
-        session.gradingResults?.[questionId] ??
-        (question
-          ? gradeQuestion(question, userAnswer).status
-          : hasUserAnswer(userAnswer)
-            ? "ungraded"
-            : "unanswered");
+
+      const outcome = resolveAttemptOutcome(session, questionId, question);
 
       const review: ReviewedQuestion = {
         questionId,
         index,
         question,
         userAnswer,
-        status: gradingStatus,
+        status: outcome.status,
         timedOut: Boolean(attempt?.timedOut),
+        selfGraded: isSelfGraded(session, questionId, outcome.status),
       };
+      if (typeof outcome.credit === "number") {
+        review.credit = outcome.credit;
+      }
+      if (attempt?.confidence) {
+        review.confidence = attempt.confidence;
+      }
       if (attempt?.difficulty) {
         review.difficulty = attempt.difficulty;
       }
@@ -115,3 +126,24 @@ export function summarizeSession(
     reviews,
   };
 }
+
+function isSelfGraded(
+  session: StudySession,
+  questionId: string,
+  status: GradingStatus,
+): boolean {
+  const attempt = session.attempts[questionId];
+  if (!attempt?.selfGrading) {
+    return false;
+  }
+  // The machine outcome (frozen record or Learn-mode check) must have been
+  // "ungraded" — self-grading never overrides a real grading result.
+  const machineOutcome =
+    session.gradingResults?.[questionId] ?? attempt.result ?? "ungraded";
+  return (
+    machineOutcome === "ungraded" &&
+    (status === "correct" || status === "incorrect")
+  );
+}
+
+export type { GradingStatus };

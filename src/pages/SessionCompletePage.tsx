@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useQuestionSet } from "@/features/question-sets/hooks/useQuestionSet";
 import { extractHistoryEntries } from "@/features/history/extractAttempts";
 import { SessionResultsView } from "@/features/results/components/SessionResultsView";
-import { loadSession, useStudySessionState } from "@/features/study/sessionStore";
+import { loadSession, setSelfGrading, useStudySessionState } from "@/features/study/sessionStore";
 import { SessionRepository } from "@/repositories/SessionRepository";
 import type { StudySession } from "@/types/session";
 
@@ -91,6 +91,11 @@ export function SessionCompletePage() {
       session={session}
       questions={questionSet?.questions ?? Object.values(session.questionSnapshots ?? {})}
       history={history}
+      onSelfGrade={(questionId, selfGrading) => {
+        // The completed session lives in the study store; the store action
+        // updates the record and persists it to the repository.
+        setSelfGrading(questionId, selfGrading);
+      }}
     />
   );
 }

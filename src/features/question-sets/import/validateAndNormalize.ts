@@ -27,6 +27,26 @@ function asOptionalTrimmedString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+/** Accepts `tags: ["a", "b"]` or `tags: "a, b"`; drops blanks and duplicates. */
+function asOptionalTagList(value: unknown): string[] | undefined {
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : undefined;
+  if (!items) {
+    return undefined;
+  }
+  const tags: string[] = [];
+  for (const item of items) {
+    const tag = asOptionalTrimmedString(item);
+    if (tag && !tags.includes(tag)) {
+      tags.push(tag);
+    }
+  }
+  return tags.length > 0 ? tags : undefined;
+}
+
 function formatQuestionLabel(index: number): string {
   return `Question ${index + 1}`;
 }
@@ -118,6 +138,7 @@ export function validateAndNormalizeQuestionSet(raw: unknown): QuestionSet {
       const explanation = asOptionalTrimmedString(rawQuestion.explanation);
       const subject = asOptionalTrimmedString(rawQuestion.subject);
       const topic = asOptionalTrimmedString(rawQuestion.topic);
+      const tags = asOptionalTagList(rawQuestion.tags);
       const difficulty = parseDifficulty(rawQuestion.difficulty);
 
       if (explanation) {
@@ -128,6 +149,9 @@ export function validateAndNormalizeQuestionSet(raw: unknown): QuestionSet {
       }
       if (topic) {
         question.topic = topic;
+      }
+      if (tags) {
+        question.tags = tags;
       }
       if (difficulty) {
         question.difficulty = difficulty;

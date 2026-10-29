@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { importQuestionSetFromFile } from "@/features/question-sets/import/importQuestionSet";
+import {
+  importQuestionSetFromFile,
+  importSetAsCopy,
+  updateSetFromImport,
+  type ImportConflict,
+} from "@/features/question-sets/import/importQuestionSet";
 import {
   QuestionSetRepository,
   QuestionSetRepositoryError,
@@ -50,13 +55,39 @@ export function useQuestionSets() {
   }, []);
 
   const importFromFile = useCallback(async (file: File) => {
-    const created = await importQuestionSetFromFile(file);
-    setQuestionSets((current) => {
-      const withoutDuplicate = current.filter((set) => set.id !== created.id);
-      return [created, ...withoutDuplicate];
-    });
-    return created;
+    const outcome = await importQuestionSetFromFile(file);
+    if (outcome.status === "created") {
+      const created = outcome.questionSet;
+      setQuestionSets((current) => {
+        const withoutDuplicate = current.filter((set) => set.id !== created.id);
+        return [created, ...withoutDuplicate];
+      });
+    }
+    // Conflicts are returned to the caller (never resolved implicitly).
+    return outcome;
   }, []);
+
+  const resolveImportConflict = useCallback(
+    async (
+      resolution: "update" | "copy",
+      conflict: ImportConflict,
+    ): Promise<QuestionSet> => {
+      const questionSet =
+        resolution === "update"
+          ? await updateSetFromImport(conflict.existing, conflict.incoming)
+          : await importSetAsCopy(conflict.incoming);
+      setQuestionSets((current) => {
+        if (current.some((set) => set.id === questionSet.id)) {
+          return current.map((set) =>
+            set.id === questionSet.id ? questionSet : set,
+          );
+        }
+        return [questionSet, ...current];
+      });
+      return questionSet;
+    },
+    [],
+  );
 
   const remove = useCallback(async (id: string) => {
     await QuestionSetRepository.delete(id);
@@ -69,6 +100,7 @@ export function useQuestionSets() {
     error,
     refresh,
     importFromFile,
+    resolveImportConflict,
     remove,
   };
 }

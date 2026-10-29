@@ -1,6 +1,7 @@
-import { gradeQuestion, type GradingStatus } from "@/features/grading/gradeQuestion";
+import { resolveAttemptOutcome } from "@/features/grading/attemptOutcome";
+import type { GradingStatus } from "@/types/grading";
 import type { Question } from "@/types/question";
-import type { DifficultyRating, StudySession } from "@/types/session";
+import type { DifficultyRating, ConfidenceRating, StudySession } from "@/types/session";
 
 export type QuestionHistoryEntry = {
   questionId: string;
@@ -12,6 +13,8 @@ export type QuestionHistoryEntry = {
   difficulty?: DifficultyRating;
   timeSpentMs?: number;
   timedOut?: boolean;
+  /** Pre-reveal confidence (Learn mode); powers "confidently wrong". */
+  confidence?: ConfidenceRating;
   completedAt: string;
 };
 
@@ -34,15 +37,7 @@ export function getAttemptResult(
   questionId: string,
   question?: Question,
 ): GradingStatus {
-  const stored = session.gradingResults?.[questionId];
-  if (stored) {
-    return stored;
-  }
-  const attempt = session.attempts[questionId];
-  if (question) {
-    return gradeQuestion(question, attempt?.userAnswer).status;
-  }
-  return attempt?.userAnswer === undefined ? "unanswered" : "ungraded";
+  return resolveAttemptOutcome(session, questionId, question).status;
 }
 
 export function extractHistoryEntries(
@@ -76,6 +71,9 @@ export function extractHistoryEntries(
       }
       if (attempt?.timedOut) {
         entry.timedOut = true;
+      }
+      if (attempt?.confidence) {
+        entry.confidence = attempt.confidence;
       }
       entries.push(entry);
     }

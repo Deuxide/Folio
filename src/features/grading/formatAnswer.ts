@@ -59,7 +59,21 @@ export function formatCorrectAnswer(question: Question): string | undefined {
   if (question.answer === undefined || question.answer === null) {
     return undefined;
   }
-  return formatAnswerValue(question, question.answer);
+  const label = formatAnswerValue(question, question.answer);
+  const type = normalizeQuestionType(question.type);
+  const unit =
+    type === "numeric" && typeof question.unit === "string"
+      ? question.unit.trim()
+      : "";
+  if (
+    label !== undefined &&
+    unit &&
+    // Guard against units that are already part of a string answer key.
+    !label.toLowerCase().endsWith(unit.toLowerCase())
+  ) {
+    return `${label} ${unit}`;
+  }
+  return label;
 }
 
 export function isQuestionGradable(question: Question): boolean {

@@ -21,6 +21,21 @@ function serializeQuestion(raw: Question) {
   if (question.answer !== undefined) {
     exported.answer = question.answer;
   }
+  if (question.acceptedAnswers && question.acceptedAnswers.length > 0) {
+    exported.acceptedAnswers = question.acceptedAnswers;
+  }
+  if (question.tolerance !== undefined) {
+    exported.tolerance = question.tolerance;
+  }
+  if (question.relativeTolerance !== undefined) {
+    exported.relativeTolerance = question.relativeTolerance;
+  }
+  if (question.unit) {
+    exported.unit = question.unit;
+  }
+  if (question.partialCredit) {
+    exported.partialCredit = question.partialCredit;
+  }
   if (question.explanation) {
     exported.explanation = question.explanation;
   }
@@ -29,6 +44,9 @@ function serializeQuestion(raw: Question) {
   }
   if (question.topic) {
     exported.topic = question.topic;
+  }
+  if (question.tags && question.tags.length > 0) {
+    exported.tags = question.tags;
   }
   if (question.images && question.images.length > 0) {
     exported.images = question.images;

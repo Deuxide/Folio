@@ -9,7 +9,9 @@ import { QuestionAttemptHistory } from "@/features/history/components/QuestionAt
 import type { QuestionHistoryEntry } from "@/features/history/extractAttempts";
 import type { ReviewedQuestion } from "@/features/grading/summarizeSession";
 import { formatCountdown } from "@/features/study/timer";
+import { confidenceLabel } from "@/features/study/confidenceLabels";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const STATUS_LABEL: Record<ReviewedQuestion["status"], string> = {
   correct: "Correct",
@@ -28,12 +30,14 @@ type QuestionReviewCardProps = {
   review: ReviewedQuestion;
   history?: QuestionHistoryEntry[];
   sourceLabel?: string;
+  onSelfGrade?: (value: "correct" | "incorrect") => void;
 };
 
 export function QuestionReviewCard({
   review,
   history = [],
   sourceLabel,
+  onSelfGrade,
 }: QuestionReviewCardProps) {
   const question = review.question;
   const userLabel = question
@@ -77,6 +81,19 @@ export function QuestionReviewCard({
                 : STATUS_LABEL[review.status]}
           </Badge>
           {review.timedOut ? <Badge variant="outline">Timed out</Badge> : null}
+          {typeof review.credit === "number" &&
+          review.credit > 0 &&
+          review.status === "incorrect" ? (
+            <Badge variant="outline">
+              Partial credit: {Math.round(review.credit * 100)}%
+            </Badge>
+          ) : null}
+          {review.confidence ? (
+            <Badge variant="secondary">{confidenceLabel(review.confidence)}</Badge>
+          ) : null}
+          {review.selfGraded ? (
+            <Badge variant="secondary">Self-graded</Badge>
+          ) : null}
         </div>
       </header>
 
@@ -130,6 +147,25 @@ export function QuestionReviewCard({
             className="mt-1 text-sm leading-relaxed"
             text={question.explanation}
           />
+        </div>
+      ) : null}
+
+      {review.status === "ungraded" && onSelfGrade && !review.selfGraded ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="w-full text-sm text-muted-foreground">
+            This question has no usable answer key. How did you do?
+          </p>
+          <Button type="button" size="sm" onClick={() => onSelfGrade("correct")}>
+            I was correct
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onSelfGrade("incorrect")}
+          >
+            I missed it
+          </Button>
         </div>
       ) : null}
 

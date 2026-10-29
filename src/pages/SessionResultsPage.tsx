@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { extractHistoryEntries } from "@/features/history/extractAttempts";
 import { SessionResultsView } from "@/features/results/components/SessionResultsView";
+import { withAttemptSelfGrading } from "@/features/grading/attemptOutcome";
 import { SessionRepository } from "@/repositories/SessionRepository";
 import { QuestionSetRepository } from "@/repositories/QuestionSetRepository";
 import type { Question } from "@/types/question";
@@ -14,6 +16,7 @@ export function SessionResultsPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [historySessions, setHistorySessions] = useState<StudySession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [gradeError, setGradeError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,11 +81,34 @@ export function SessionResultsPage() {
   }
 
   return (
-    <SessionResultsView
-      session={session}
-      questions={questions}
-      history={history}
-      title="Session results"
-    />
+    <div className="space-y-4">
+      {gradeError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Your grade was not saved</AlertTitle>
+          <AlertDescription>{gradeError}</AlertDescription>
+        </Alert>
+      ) : null}
+      <SessionResultsView
+        session={session}
+        questions={questions}
+        history={history}
+        title="Session results"
+        onSelfGrade={(questionId, selfGrading) => {
+          const next = withAttemptSelfGrading(session, questionId, selfGrading);
+          void SessionRepository.save(next)
+            .then(() => {
+              setGradeError(null);
+              setSession(next);
+            })
+            .catch((cause: unknown) => {
+              setGradeError(
+                cause instanceof Error
+                  ? cause.message
+                  : "Unable to save this grade on this device.",
+              );
+            });
+        }}
+      />
+    </div>
   );
 }

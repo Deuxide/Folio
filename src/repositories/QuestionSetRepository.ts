@@ -89,6 +89,32 @@ export const QuestionSetRepository = {
     }
   },
 
+  async updateFromImport(
+    existing: QuestionSet,
+    incoming: QuestionSet,
+  ): Promise<QuestionSet> {
+    // Re-import "update in place": the file is the source of truth for
+    // question content (ids must stay stable so existing attempts keep
+    // resolving), but identity fields (`id`, `createdAt`) and omitted
+    // optional metadata (subject, description, topic) are preserved rather
+    // than silently dropped.
+    const next: QuestionSet = {
+      ...existing,
+      ...incoming,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+    if (!incoming.subject && existing.subject) {
+      next.subject = existing.subject;
+    }
+    if (!incoming.description && existing.description) {
+      next.description = existing.description;
+    }
+    await this.update(next);
+    return next;
+  },
+
   async updateQuestionDifficulty(
     questionSetId: string,
     questionId: string,

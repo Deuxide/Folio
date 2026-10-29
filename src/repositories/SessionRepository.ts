@@ -82,8 +82,14 @@ export const SessionRepository = {
   async save(session: StudySession): Promise<StudySession> {
     try {
       const db = await getDb();
-      await db.put(STUDY_SESSIONS_STORE, session);
-      return session;
+      // Tag the content version on write so future migrations can branch on
+      // it; sessions written before this field existed are version 1.
+      const stored: StudySession = {
+        ...session,
+        schemaVersion: session.schemaVersion ?? 1,
+      };
+      await db.put(STUDY_SESSIONS_STORE, stored);
+      return stored;
     } catch (cause) {
       throw new SessionRepositoryError(
         "Unable to save the study session on this device.",

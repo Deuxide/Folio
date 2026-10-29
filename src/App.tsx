@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { DataPage } from "@/pages/DataPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { QuestionSetDetailPage } from "@/pages/QuestionSetDetailPage";
 import { QuestionSetsPage } from "@/pages/QuestionSetsPage";
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="statistics" element={<StatisticsPage />} />
+            <Route path="data" element={<DataPage />} />
             <Route path="sessions/:sessionId" element={<SessionResultsPage />} />
             <Route path="sets/:id" element={<QuestionSetDetailPage />} />
             <Route path="sets/:id/setup" element={<SessionSetupPage />} />

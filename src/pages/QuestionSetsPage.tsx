@@ -10,7 +10,9 @@ import { ImportErrorDialog } from "@/features/question-sets/components/ImportErr
 import { ImportQuestionSetButton } from "@/features/question-sets/components/ImportQuestionSetButton";
 import { QuestionSetCard } from "@/features/question-sets/components/QuestionSetCard";
 import { QuestionSetEmptyState } from "@/features/question-sets/components/QuestionSetEmptyState";
+import { ReimportConflictDialog } from "@/features/question-sets/components/ReimportConflictDialog";
 import { getImportErrorMessage } from "@/features/question-sets/import/ImportValidationError";
+import type { ImportConflict } from "@/features/question-sets/import/importQuestionSet";
 import { useQuestionSets } from "@/features/question-sets/hooks/useQuestionSets";
 import { formatHistoryDate } from "@/features/history/formatDate";
 import { sessionAccuracy } from "@/features/statistics/computeStatistics";
@@ -18,12 +20,16 @@ import { SessionRepository } from "@/repositories/SessionRepository";
 import type { StudySession } from "@/types/session";
 
 export function QuestionSetsPage() {
-  const { questionSets, isLoading, error, importFromFile, remove } =
+  const { questionSets, isLoading, error, importFromFile, resolveImportConflict, remove } =
     useQuestionSets();
   const [importError, setImportError] = useState<{
     title: string;
     problems: string[];
   } | null>(null);
+  const [importConflict, setImportConflict] = useState<ImportConflict | null>(
+    null,
+  );
+  const [isResolvingImport, setIsResolvingImport] = useState(false);
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [todayStudy, setTodayStudy] = useState<StudyOccurrence[]>([]);
 
@@ -71,6 +77,29 @@ export function QuestionSetsPage() {
     setImportError(getImportErrorMessage(cause));
   }
 
+  async function importSet(file: File) {
+    const outcome = await importFromFile(file);
+    if (outcome.status === "conflict") {
+      setImportConflict(outcome);
+    }
+  }
+
+  async function resolveConflict(
+    resolution: "update" | "copy",
+    conflict: ImportConflict,
+  ) {
+    setIsResolvingImport(true);
+    try {
+      await resolveImportConflict(resolution, conflict);
+      setImportConflict(null);
+    } catch (cause) {
+      setImportConflict(null);
+      handleImportError(cause);
+    } finally {
+      setIsResolvingImport(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -88,7 +117,7 @@ export function QuestionSetsPage() {
         </div>
         {questionSets.length > 0 ? (
           <ImportQuestionSetButton
-            onImport={importFromFile}
+            onImport={importSet}
             onError={handleImportError}
           />
         ) : null}
@@ -133,7 +162,7 @@ export function QuestionSetsPage() {
         </div>
       ) : questionSets.length === 0 ? (
         <QuestionSetEmptyState
-          onImport={importFromFile}
+          onImport={importSet}
           onError={handleImportError}
         />
       ) : (
@@ -155,6 +184,14 @@ export function QuestionSetsPage() {
           })}
         </div>
       )}
+
+      <ReimportConflictDialog
+        conflict={importConflict}
+        isResolving={isResolvingImport}
+        onUpdate={(target) => resolveConflict("update", target)}
+        onCopy={(target) => resolveConflict("copy", target)}
+        onClose={() => setImportConflict(null)}
+      />
 
       <ImportErrorDialog
         open={importError !== null}

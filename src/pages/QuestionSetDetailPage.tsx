@@ -18,6 +18,7 @@ import {
   formatDifficultyAverage,
   summarizeQuestionDifficulty,
 } from "@/features/statistics/difficultySummary";
+import { ResumeSessionBanner } from "@/features/study/components/ResumeSessionBanner";
 import { formatCountdown, getRemainingMs, isDeadlinePassed } from "@/features/study/timer";
 import {
   completeStudySession,
@@ -182,9 +183,9 @@ export function QuestionSetDetailPage() {
           />
 
           {activeSession ? (
-            <Alert>
-              <AlertTitle>Resume your session?</AlertTitle>
-              <AlertDescription>
+            <ResumeSessionBanner
+              prompt="Resume your session?"
+              description={
                 <p>
                   {questionSet.title} · Question {activeSession.currentIndex + 1}{" "}
                   of {activeSession.questionIds.length}
@@ -192,26 +193,15 @@ export function QuestionSetDetailPage() {
                     ? ` · Time remaining: ${formatCountdown(getRemainingMs(activeSession.sessionDeadline) ?? 0)}`
                     : ""}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button asChild size="sm">
-                    <Link to={`/sets/${questionSet.id}/study`}>Resume</Link>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      loadSession(activeSession);
-                      void discardStudySession().then(() => {
-                        setActiveSession(null);
-                      });
-                    }}
-                  >
-                    Discard
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
+              }
+              resumeTo={`/sets/${questionSet.id}/study`}
+              onDiscard={() => {
+                loadSession(activeSession);
+                void discardStudySession().then(() => {
+                  setActiveSession(null);
+                });
+              }}
+            />
           ) : null}
 
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
